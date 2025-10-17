@@ -95,24 +95,35 @@ class FastAgent:
         
         return False
     
+    def is_ipv6(self, ip: str) -> bool:
+        """IPv6 주소인지 확인"""
+        return ':' in ip
+    
     async def block_ip(self, ip: str, reason: str):
-        """IP 주소 차단 (iptables 사용)"""
+        """IP 주소 차단 (iptables/ip6tables 사용)"""
         if ip in self.blocked_ips:
             print(f"[FastAgent] IP {ip} already blocked")
             return
         
         try:
-            # iptables로 차단
-            cmd = ['sudo', 'iptables', '-A', 'INPUT', '-s', ip, '-j', 'DROP']
+            # IPv6인지 IPv4인지 확인
+            if self.is_ipv6(ip):
+                # IPv6는 ip6tables 사용
+                cmd = ['sudo', 'ip6tables', '-A', 'INPUT', '-s', ip, '-j', 'DROP']
+            else:
+                # IPv4는 iptables 사용
+                cmd = ['sudo', 'iptables', '-A', 'INPUT', '-s', ip, '-j', 'DROP']
+            
             result = subprocess.run(cmd, capture_output=True, text=True)
             
             if result.returncode == 0:
                 self.blocked_ips.add(ip)
-                print(f"[FastAgent] 🚫 BLOCKED: {ip} - Reason: {reason}")
+                ip_type = "IPv6" if self.is_ipv6(ip) else "IPv4"
+                print(f"[FastAgent] 🚫 BLOCKED ({ip_type}): {ip} - Reason: {reason}")
                 
                 # 로그 파일에 기록
                 with open('/var/log/fastagent_blocks.log', 'a') as f:
-                    f.write(f"{datetime.now().isoformat()} | BLOCKED | {ip} | {reason}\n")
+                    f.write(f"{datetime.now().isoformat()} | BLOCKED | {ip_type} | {ip} | {reason}\n")
             else:
                 print(f"[FastAgent] Failed to block {ip}: {result.stderr}")
                 
